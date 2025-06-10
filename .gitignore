@@ -22,3 +22,7 @@ __init__.py
 #ignore mac specific file
 .DS_Store
 
+
+*.png
+*.root
+*.csv
