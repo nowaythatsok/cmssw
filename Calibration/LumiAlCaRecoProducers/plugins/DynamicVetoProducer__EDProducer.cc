@@ -22,7 +22,7 @@ ________________________________________________________________**/
 #include "TLine.h"
 #include "TMath.h"
 
-#include "Calibration/LumiAlCaRecoProducers/plugins/DQMOneEDProducer.h"
+// #include "Calibration/LumiAlCaRecoProducers/plugins/DQMOneEDProducer.h"
 #include "CondCore/DBOutputService/interface/PoolDBOutputService.h"
 #include "CondFormats/DataRecord/interface/PccVetoListRcd.h"
 #include "CondFormats/Luminosity/interface/PccVetoList.h"
@@ -70,8 +70,7 @@ enum class TrackerRegion {
   Epix_3_ring2,
 };
 
-// class DynamicVetoProducer : public DQMOneEDAnalyzer<edm::one::WatchLuminosityBlocks> {
-class DynamicVetoProducer : public DQMOneEDProducer<edm::one::WatchLuminosityBlocks> {
+class DynamicVetoProducer : public edm::one::EDProducer<edm::BeginLuminosityBlockProducer, edm::EndLuminosityBlockProducer, edm::EndRunProducer, edm::one::WatchRuns> {
 public:
   explicit DynamicVetoProducer(const edm::ParameterSet&);
   ~DynamicVetoProducer() override;
@@ -140,14 +139,15 @@ private:
                     std::vector<int>& badModules);
 
   // actions
-  void beginLuminosityBlock(edm::LuminosityBlock const& lumiSeg, const edm::EventSetup& iSetup) final;
-  void endLuminosityBlock(edm::LuminosityBlock const& lumiSeg, const edm::EventSetup& iSetup) final;
-  // void dqmEndRun(const edm::Run & runSeg, const edm::EventSetup& iSetup);
-  void dqmEndRun(edm::Run& runSeg, const edm::EventSetup& iSetup) override;
+  void beginLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) final;
+  void endLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) final;
+  // void endRun(const edm::Run & runSeg, const edm::EventSetup& iSetup);
+  void endRunProduce(edm::Run & runSeg, const edm::EventSetup& iSetup) override;
   void endJob() final;
 
-  // must have
-  void bookHistograms(DQMStore::IBooker& ibooker, edm::Run const& iRun, edm::EventSetup const& context) override {}
+  void beginRun(edm::Run const&, edm::EventSetup const&) final {}
+  void endRun(edm::Run const&, edm::EventSetup const&) final {}
+  void produce(edm::Event&, edm::EventSetup const&) final {}
 
   //
   void makePlot(std::string name,
@@ -359,15 +359,15 @@ int DynamicVetoProducer::addBadModules(const std::map<int, double>& moduleID2val
 
 //--------------------------------------------------------------------------------------------------
 
-void DynamicVetoProducer::beginLuminosityBlock(edm::LuminosityBlock const& lumiSeg, const edm::EventSetup& iSetup) {
+void DynamicVetoProducer::beginLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) {
   lumisectionCount_++;
   if (coutOn_)
-    std::cout << "DynamicVetoProducer::beginLuminosityBlock " << lumiSeg.luminosityBlock() << std::endl;
+    std::cout << "DynamicVetoProducer::beginLuminosityBlockProduce " << lumiSeg.luminosityBlock() << std::endl;
 }
 
-void DynamicVetoProducer::endLuminosityBlock(edm::LuminosityBlock const& lumiSeg, const edm::EventSetup& iSetup) {
+void DynamicVetoProducer::endLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) {
   if (coutOn_)
-    std::cout << "DynamicVetoProducer::endLuminosityBlock " << lumiSeg.luminosityBlock() << std::endl;
+    std::cout << "DynamicVetoProducer::endLuminosityBlockProduce " << lumiSeg.luminosityBlock() << std::endl;
 
   const edm::Handle<reco::PixelClusterCounts> pccHandle = lumiSeg.getHandle(pccToken_);
   const reco::PixelClusterCounts& inputPcc = *(pccHandle.product());
@@ -410,8 +410,8 @@ void DynamicVetoProducer::endLuminosityBlock(edm::LuminosityBlock const& lumiSeg
 }
 
 //--------------------------------------------------------------------------------------------------
-// void DynamicVetoProducer::dqmEndRun(const edm::Run & runSeg, const edm::EventSetup& iSetup) {
-void DynamicVetoProducer::dqmEndRun(edm::Run& runSeg, const edm::EventSetup& iSetup) {
+// void DynamicVetoProducer::endRun(const edm::Run & runSeg, const edm::EventSetup& iSetup) {
+void DynamicVetoProducer::endRunProduce(edm::Run& runSeg, const edm::EventSetup& iSetup) {
   if ((lumisectionCountMin_ > 0) && (lumisectionCount_ < lumisectionCountMin_)) {
     edm::LogInfo("INFO") << "Number of Lumisections " << lumisectionCount_ << " in run " << runSeg.run()
                          << " which is too few. Skipping update to veto list.";
@@ -422,10 +422,10 @@ void DynamicVetoProducer::dqmEndRun(edm::Run& runSeg, const edm::EventSetup& iSe
     return;
   }
 
-  edm::LogInfo("INFO") << "DynamicVetoProducer::dqmEndRun: Number of Lumisections processed in run " << runSeg.run()
+  edm::LogInfo("INFO") << "DynamicVetoProducer::endRun: Number of Lumisections processed in run " << runSeg.run()
                        << " : " << lumisectionCount_;
   if (coutOn_)
-    std::cout << "DynamicVetoProducer::dqmEndRun: Number of Lumisections processed in run " << runSeg.run() << " : "
+    std::cout << "DynamicVetoProducer::endRun: Number of Lumisections processed in run " << runSeg.run() << " : "
               << lumisectionCount_ << std::endl;
 
   // round1: remove outliers in terms of occupancy in a given layer/region
@@ -446,9 +446,9 @@ void DynamicVetoProducer::dqmEndRun(edm::Run& runSeg, const edm::EventSetup& iSe
         makePlot(name, moduleID2value, center, std, distance, badModuleCount);
       }
     }
-  // edm::LogInfo("INFO") << "DynamicVetoProducer::dqmEndRun: Modules removed in round 1: " << additionalVeto1_.size();
+  // edm::LogInfo("INFO") << "DynamicVetoProducer::endRun: Modules removed in round 1: " << additionalVeto1_.size();
   if (coutOn_)
-    std::cout << "DynamicVetoProducer::dqmEndRun: Modules removed in round 1: " << additionalVeto1_.size() << std::endl;
+    std::cout << "DynamicVetoProducer::endRun: Modules removed in round 1: " << additionalVeto1_.size() << std::endl;
 
   // round2: filter based on the stability of the per-LS cluster count of the module over the run
   if (filterLevel_ >= 2)
@@ -497,9 +497,9 @@ void DynamicVetoProducer::dqmEndRun(edm::Run& runSeg, const edm::EventSetup& iSe
           additionalVeto2_.push_back(mId);  // should only be 0.2% for a gaussian distribution
       }
     }
-  // edm::LogInfo("INFO") << "DynamicVetoProducer::dqmEndRun: Modules removed in round 2: " << additionalVeto2_.size();
+  // edm::LogInfo("INFO") << "DynamicVetoProducer::endRun: Modules removed in round 2: " << additionalVeto2_.size();
   if (coutOn_)
-    std::cout << "DynamicVetoProducer::dqmEndRun: Modules removed in round 2: " << additionalVeto2_.size() << std::endl;
+    std::cout << "DynamicVetoProducer::endRun: Modules removed in round 2: " << additionalVeto2_.size() << std::endl;
 
   // round3: filter based on the fractional response of the module
   if (filterLevel_ >= 3) {
@@ -543,7 +543,7 @@ void DynamicVetoProducer::dqmEndRun(edm::Run& runSeg, const edm::EventSetup& iSe
     }
 
     if (coutOn_)
-      std::cout << "DynamicVetoProducer::dqmEndRun: Modules removed in round 3: " << additionalVeto3_.size()
+      std::cout << "DynamicVetoProducer::endRun: Modules removed in round 3: " << additionalVeto3_.size()
                 << std::endl;
   }
 
@@ -577,9 +577,9 @@ void DynamicVetoProducer::dqmEndRun(edm::Run& runSeg, const edm::EventSetup& iSe
     // }
 
     csfile.close();
-    edm::LogInfo("INFO") << "DynamicVetoProducer::dqmEndRun: CSV created: " << csvOutLabel_;
+    edm::LogInfo("INFO") << "DynamicVetoProducer::endRun: CSV created: " << csvOutLabel_;
     if (coutOn_)
-      std::cout << "DynamicVetoProducer::dqmEndRun: CSV created: " << csvOutLabel_ << std::endl;
+      std::cout << "DynamicVetoProducer::endRun: CSV created: " << csvOutLabel_ << std::endl;
   }
 
   PccVetoList pccVetoList;
@@ -601,12 +601,12 @@ void DynamicVetoProducer::dqmEndRun(edm::Run& runSeg, const edm::EventSetup& iSe
     // Hash writeOneIOV(const T& payload, Time_t time, const std::string& recordName)
     poolDbService->writeOneIOV(pccVetoList, iovStart, "PccVetoListRcd");
     if (coutOn_)
-      std::cout << "DynamicVetoProducer::dqmEndRun: written to DB " << std::endl;
+      std::cout << "DynamicVetoProducer::endRun: written to DB " << std::endl;
 
   } else {
-    edm::LogInfo("INFO") << "DynamicVetoProducer::dqmEndRun: PoolDBService required.";
+    edm::LogInfo("INFO") << "DynamicVetoProducer::endRun: PoolDBService required.";
     if (coutOn_)
-      std::cout << "DynamicVetoProducer::dqmEndRun: PoolDBService required." << std::endl;
+      std::cout << "DynamicVetoProducer::endRun: PoolDBService required." << std::endl;
 
     // throw std::runtime_error("PoolDBService required.");
   }
