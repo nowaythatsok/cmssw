@@ -59,7 +59,7 @@ process.alcaPCCEventProducer = cms.EDProducer("AlcaPCCEventProducer",
 ##ALCAPCC->ALCARECO
 process.alcaPCCIntegrator = cms.EDProducer("AlcaPCCIntegrator",
     AlcaPCCIntegratorParameters = cms.PSet(
-        inputPccLabel = cms.string("alcaPCCEventProducer"),
+        inputPccLabel = cms.InputTag("alcaPCCEventProducer"),
         trigstring = cms.untracked.string(""),
         ProdInst = cms.string("")
     ),
@@ -177,12 +177,12 @@ process.ALCARECOStreamPromptCalibProdPCC = cms.OutputModule("PoolOutputModule",
 ####################
 ### sequences/paths
 process.seqALCARECOPromptCalibProdPCC = cms.Sequence(
-    process.siPixelDigisForLumi
-    +process.siPixelClustersForLumi
-    +process.alcaPCCEventProducer
-    +process.alcaPCCIntegrator
-    +process.rawPCCProd
-    +process.dynamicVetoProd
+    # process.siPixelDigisForLumi+
+    # process.siPixelClustersForLumi+
+    # process.alcaPCCEventProducer+
+    process.alcaPCCIntegrator+
+    process.rawPCCProd+
+    process.dynamicVetoProd
     )
 #process.seqALCARECOPromptCalibProdPCC = cms.Sequence(process.siPixelDigisForLumi+process.siPixelClustersForLumi+process.alcaPCCEventProducer+process.alcaPCCIntegrator)
 #process.seqALCARECOPromptCalibProdPCC = cms.Sequence(process.siPixelDigisForLumi+process.siPixelClustersForLumi+process.alcaPCCEventProducer)

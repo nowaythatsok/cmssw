@@ -3,24 +3,30 @@
 ## Jose Benitez, Attila Radl, Alexey Shevelev
 #########################
 import FWCore.ParameterSet.Config as cms
-from Configuration.Eras.Era_Run2_2018_cff import Run2_2018
+from Configuration.Eras.Era_Run3_2024_cff import Run3_2024
 
-process = cms.Process('PCC',Run2_2018)
+process = cms.Process('PCC',Run3_2024)
 
-### Files run by Braden:
+### Files run by Braden: -- these contain no edm colections! -- edmDumpEventContent /eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/242f6268-861c-4231-9cf8-b51c22aa7195.root
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/242f6268-861c-4231-9cf8-b51c22aa7195.root'
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/9491103d-34bf-441c-bd88-b7b3cd3d71a3.root'
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/ac0dc5c4-c440-4c03-b876-e7731816355a.root'
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/e644fd22-7a9f-4e3e-8edc-626aabea358d.root'
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/edc8ddbc-de7e-4896-ad05-b63a1805d011.root'
 
+/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/
+# 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/01e533af-8d30-445e-ae06-e6556de459d1.root'
+# 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/70db01b0-c42e-45d0-a1bb-b28d4fa4458c.root'
+# 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/1c99fe38-e3dd-4764-a104-d0d0a274c027.root'
+# 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/4150272f-3d98-4d1d-a1a1-8874ca1f155d.root'
+# 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/f9dea74a-0687-440a-84ba-2488884804e7.root'
+# here -- edmDumpEventContent /eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/01e533af-8d30-445e-ae06-e6556de459d1.root
 process.source = cms.Source("PoolSource",
-fileNames = cms.untracked.vstring('file:/eos/home-a/alshevel/CMSSW_14_0_9_patch1/src/Calibration/LumiAlCaRecoProducers/python/input_pcc.root')
-#fileNames = cms.untracked.vstring('file:/afs/cern.ch/user/b/benitezj/public/BRIL/PCC/Run3Dev/Run2018D-AlCaLumiPixels-RAW-323702-D3FCD0FC-6328-B24E-AD3D-C22C55B968DD.root')
+fileNames = cms.untracked.vstring('file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/242f6268-861c-4231-9cf8-b51c22aa7195.root')
 )
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(1000) 
+    input = cms.untracked.int32(2000000) 
 )
 
 # import of standard configurations
@@ -34,7 +40,7 @@ process.load('Configuration.StandardSequences.AlCaRecoStreams_cff')
 process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 from Configuration.AlCa.GlobalTag import GlobalTag
-process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:run2_data', '')
+process.GlobalTag = GlobalTag(process.GlobalTag, 'auto:run3_data', '')
 
 
 from EventFilter.SiPixelRawToDigi.SiPixelRawToDigi_cfi import siPixelDigis
@@ -82,17 +88,17 @@ process.rawPCCProd = cms.EDProducer("RawPCCProducer",
 
 ################################
 ##ALCARECO->csv
-process.dynamicVetoProd = cms.EDProducer("DynamicVetoProducer",
-    DynamicVetoProducerParameters = cms.PSet(
+process.dynamicVetoProd = cms.EDProducer("DynamicVetoProducerEDp",
+    DynamicVetoProducerEDpParameters = cms.PSet(
         inputPccLabel = cms.string("alcaPCCIntegrator"),
         prodInst = cms.string(""),
         outputProductName = cms.untracked.string("alcaPccVetoList"),
-        BaseVeto=cms.vint32(),
-        SaveBaseVeto=cms.bool(False),
+        SaveBaseVeto=cms.bool(True),
         FractionalResponse_modID=cms.vint32(),
         FractionalResponse_value=cms.vdouble(),
         ModuleListRing1=cms.untracked.vint32(),
-        MinimumLSCount=cms.untracked.int32(-1),
+        # MinimumLSCount=cms.untracked.int32(200),
+        MinimumLSCount=cms.untracked.int32(4),
         StdMultiplyier1=cms.double(3.0),
         StdMultiplyier2=cms.double(3.0),
         FractionThreshold2=cms.double(0.02),
@@ -101,25 +107,18 @@ process.dynamicVetoProd = cms.EDProducer("DynamicVetoProducer",
         SavePlots=cms.untracked.bool(True),
         CoutOn=cms.untracked.bool(True),
         SaveCSVFile=cms.untracked.bool(True),
-        CsvFileName=cms.untracked.string("dynamicVetoProducer_Run2test.csv"),
+        CsvFileName=cms.untracked.string("dynamicVetoProducer.csv"),
     )
 )
 
-
-
-with open("minimal_veto-2024.txt") as f: 
-    process.dynamicVetoProd.DynamicVetoProducerParameters.BaseVeto.extend([ int(v) for v in f.readlines()])
-
-with open("minimal_veto_frac_response-2024.txt") as f: 
+with open("minimal_veto_frac_response-2024-out.txt") as f: 
     tmp = [ v.split(",") for v in f.readlines()]
     moduleID          = [ int(l[0]) for l in tmp[1:]]
     ractionalResponse = [ float(l[1]) for l in tmp[1:]]
-    process.dynamicVetoProd.DynamicVetoProducerParameters.FractionalResponse_modID.extend(moduleID)
-    process.dynamicVetoProd.DynamicVetoProducerParameters.FractionalResponse_value.extend(ractionalResponse)
+    process.dynamicVetoProd.DynamicVetoProducerEDpParameters.FractionalResponse_modID.extend(moduleID)
+    process.dynamicVetoProd.DynamicVetoProducerEDpParameters.FractionalResponse_value.extend(ractionalResponse)
 
-
-
-process.dynamicVetoProd.DynamicVetoProducerParameters.ModuleListRing1.extend([
+process.dynamicVetoProd.DynamicVetoProducerEDpParameters.ModuleListRing1.extend([
   344282116, 344283140, 344286212, 344941572, 352588804, 352589828, 352592900, 353215492, 344724484, 344725508, 344728580, 344729604, 344732676, 344733700, 344736772, 344737796, 
   352596996, 352598020, 352601092, 353227780, 352605188, 353235972, 352609284, 352610308, 344740868, 344741892, 344744964, 344745988, 344749060, 344750084, 344753156, 344754180, 
   352613380, 353244164, 352617476, 352618500, 352621572, 353256452, 352625668, 353268740, 344757252, 344758276, 344761348, 344762372, 344765444, 344766468, 344769540, 344770564, 
@@ -138,20 +137,6 @@ process.dynamicVetoProd.DynamicVetoProducerParameters.ModuleListRing1.extend([
   353170436, 353171460, 353174532, 353175556, 353178628, 353179652, 353182724, 353183748, 344265732, 344912900, 344269828, 344270852, 344273924, 344921092, 344278020, 344929284, 
   353186820, 353187844, 353190916, 353191940, 353195012, 353196036, 353199108, 353200132 
 ])
-
-#####################################
-
-# process.dynamicVetoProd_old = cms.EDProducer("DynamicVetoProducer_old",
-#     DynamicVetoProducer_oldParameters = cms.PSet(
-#         inputPccLabel = cms.string("alcaPCCIntegrator"),
-#         BaseVeto=cms.vint32(),
-#         MinimumLSCount=cms.untracked.int32(50),
-#         StdMultiplyier1=cms.double(3.0),
-#         StdMultiplyier2=cms.double(3.0),
-#         SaveCSVFile=cms.untracked.bool(True),
-#         CsvFileName=cms.untracked.string("dynamicVetoProducer.csv"),
-#     )
-# )
 
 # process.load("CondCore.CondDB.CondDB_cfi")
 # process.CondDB.connect = "sqlite_file:PCC_Veto.db" # Output SQLite file
@@ -179,29 +164,28 @@ process.ALCARECOStreamPromptCalibProdPCC = cms.OutputModule("PoolOutputModule",
         filterName = cms.untracked.string('PromptCalibProdPCC')
     ),
     eventAutoFlushCompressedSize = cms.untracked.int32(5242880),
-    fileName = cms.untracked.string('PCC_Run2test.root'),
+    fileName = cms.untracked.string('PCC_Run3.root'),
     outputCommands = cms.untracked.vstring('drop *', 
                                            #'keep *_hltFEDSelectorLumiPixels_*_*',
                                            #'keep *_siPixelDigisForLumi_*_*',
                                            #'keep *_siPixelClustersForLumi_*_*',
-                                           'keep *_alcaPCCEventProducer_*_*',
+                                        #    'keep *_alcaPCCEventProducer_*_*',
                                            'keep *_alcaPCCIntegrator_*_*',
                                            'keep *_rawPCCProd_*_*',
-                                        #    'keep *_dynamicVetoProd_*_*',
-                                        #    'keep *_dynamicVetoProd_old_*_*',
+                                           'keep *_dynamicVetoProd_*_*',
                                        )
 )
 
 ####################
 ### sequences/paths
 process.seqALCARECOPromptCalibProdPCC = cms.Sequence(
-    process.siPixelDigisForLumi
-    +process.siPixelClustersForLumi
-    +process.alcaPCCEventProducer
-    +process.alcaPCCIntegrator
-    +process.rawPCCProd
-    +process.dynamicVetoProd
-    # +process.dynamicVetoProd_old
+    # process.siPixelDigisForLumi+
+    # process.siPixelClustersForLumi+
+    # process.alcaPCCEventProducer+
+    process.alcaPCCIntegrator+
+    process.rawPCCProd+
+    process.dynamicVetoProd
+    # + process.rawPCCProdDynVeto
     )
 #process.seqALCARECOPromptCalibProdPCC = cms.Sequence(process.siPixelDigisForLumi+process.siPixelClustersForLumi+process.alcaPCCEventProducer+process.alcaPCCIntegrator)
 #process.seqALCARECOPromptCalibProdPCC = cms.Sequence(process.siPixelDigisForLumi+process.siPixelClustersForLumi+process.alcaPCCEventProducer)

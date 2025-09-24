@@ -19,9 +19,9 @@ fileNames = cms.untracked.vstring('file:/eos/home-a/alshevel/CMSSW_14_0_9_patch1
 #fileNames = cms.untracked.vstring('file:/afs/cern.ch/user/b/benitezj/public/BRIL/PCC/Run3Dev/Run2018D-AlCaLumiPixels-RAW-323702-D3FCD0FC-6328-B24E-AD3D-C22C55B968DD.root')
 )
 
-process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(1000) 
-)
+# process.maxEvents = cms.untracked.PSet(
+#     input = cms.untracked.int32(1000) 
+# )
 
 # import of standard configurations
 process.load('Configuration.StandardSequences.Services_cff')
@@ -82,8 +82,8 @@ process.rawPCCProd = cms.EDProducer("RawPCCProducer",
 
 ################################
 ##ALCARECO->csv
-process.dynamicVetoProd = cms.EDProducer("DynamicVetoProducer",
-    DynamicVetoProducerParameters = cms.PSet(
+process.dynamicVetoProd = cms.EDProducer("DynamicVetoProducerEDp",
+    DynamicVetoProducerEDpParameters = cms.PSet(
         inputPccLabel = cms.string("alcaPCCIntegrator"),
         prodInst = cms.string(""),
         outputProductName = cms.untracked.string("alcaPccVetoList"),
@@ -106,20 +106,16 @@ process.dynamicVetoProd = cms.EDProducer("DynamicVetoProducer",
 )
 
 
-
-with open("minimal_veto-2024.txt") as f: 
-    process.dynamicVetoProd.DynamicVetoProducerParameters.BaseVeto.extend([ int(v) for v in f.readlines()])
-
 with open("minimal_veto_frac_response-2024.txt") as f: 
     tmp = [ v.split(",") for v in f.readlines()]
     moduleID          = [ int(l[0]) for l in tmp[1:]]
     ractionalResponse = [ float(l[1]) for l in tmp[1:]]
-    process.dynamicVetoProd.DynamicVetoProducerParameters.FractionalResponse_modID.extend(moduleID)
-    process.dynamicVetoProd.DynamicVetoProducerParameters.FractionalResponse_value.extend(ractionalResponse)
+    process.dynamicVetoProd.DynamicVetoProducerEDpParameters.FractionalResponse_modID.extend(moduleID)
+    process.dynamicVetoProd.DynamicVetoProducerEDpParameters.FractionalResponse_value.extend(ractionalResponse)
 
 
 
-process.dynamicVetoProd.DynamicVetoProducerParameters.ModuleListRing1.extend([
+process.dynamicVetoProd.DynamicVetoProducerEDpParameters.ModuleListRing1.extend([
   344282116, 344283140, 344286212, 344941572, 352588804, 352589828, 352592900, 353215492, 344724484, 344725508, 344728580, 344729604, 344732676, 344733700, 344736772, 344737796, 
   352596996, 352598020, 352601092, 353227780, 352605188, 353235972, 352609284, 352610308, 344740868, 344741892, 344744964, 344745988, 344749060, 344750084, 344753156, 344754180, 
   352613380, 353244164, 352617476, 352618500, 352621572, 353256452, 352625668, 353268740, 344757252, 344758276, 344761348, 344762372, 344765444, 344766468, 344769540, 344770564, 
@@ -141,8 +137,8 @@ process.dynamicVetoProd.DynamicVetoProducerParameters.ModuleListRing1.extend([
 
 #####################################
 
-# process.dynamicVetoProd_old = cms.EDProducer("DynamicVetoProducer_old",
-#     DynamicVetoProducer_oldParameters = cms.PSet(
+# process.dynamicVetoProd_old = cms.EDProducer("DynamicVetoProducerEDp_old",
+#     DynamicVetoProducerEDp_oldParameters = cms.PSet(
 #         inputPccLabel = cms.string("alcaPCCIntegrator"),
 #         BaseVeto=cms.vint32(),
 #         MinimumLSCount=cms.untracked.int32(50),

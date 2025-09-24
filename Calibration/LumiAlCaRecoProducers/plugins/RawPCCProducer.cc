@@ -111,6 +111,8 @@ void RawPCCProducer::globalEndLuminosityBlockProduce(edm::LuminosityBlock& lumiS
   //cluster counts per module per bx
   auto clustersPerBXInput = inputPcc.readCounts();
 
+  std::cout<<" RawPCCProducer::globalEndLuminosityBlockProduce: modID.size(): "<<modID.size()<<std::endl;
+
   ////////////////////////////
   ///Apply the module veto
   ///////////////////////////
