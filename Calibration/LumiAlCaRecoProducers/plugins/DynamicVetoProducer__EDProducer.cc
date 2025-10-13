@@ -4,6 +4,9 @@ Author: Braden Kronheim and Peter Major
 
 Algo description:
 https://indico.cern.ch/event/1358674/#34-pcc-active-masking
+https://indico.cern.ch/event/1484765/contributions/6260307/attachments/2986815/5260594/PCC_Dynamic_Veto.pdf
+https://gitlab.cern.ch/bkronhei/pcc-dynamic-veto/-/blob/master/processHits.cc?ref_type=heads#L93
+
 ________________________________________________________________**/
 #include <boost/serialization/vector.hpp>
 #include <cmath>
@@ -87,6 +90,7 @@ private:
   bool saveBaseVeto_;
   std::vector<int> moduleListRing1_;
   int lumisectionCountMin_;
+  double filledBunchThreshold_;
   double stdMultiplyer1_;
   double stdMultiplyer2_;
   double stdMultiplyer3_;
@@ -106,16 +110,16 @@ private:
 
   // working containers
   //// for round 1
-  std::vector<int> dynamicVeto1_;
-  std::map<TrackerRegion, std::map<int, double> > region2moduleID2countRatio;
+  std::unordered_set<int> dynamicVetoSet1;
+  std::map<TrackerRegion, std::map<int, double> > region2moduleID2sumCount;
   int lumisectionCount_ = 0;
 
   //// for round 2
-  std::vector<int> dynamicVeto2_;
-  std::map<TrackerRegion, std::map<int, std::vector<unsigned int> > > region2moduleID2LS2counts;
+  std::unordered_set<int> dynamicVetoSet2;
+  std::map<TrackerRegion, std::map<int, std::vector<unsigned int> > > region2moduleID2LS2count;
 
   //// for round 3
-  std::vector<int> dynamicVeto3_;
+  std::unordered_set<int> dynamicVetoSet3;
   std::unordered_map<int, double> fractionalResponseMap;
 
   // geometry
@@ -134,6 +138,11 @@ private:
                     const double mean,
                     const double distance,
                     std::vector<int>& badModules);
+
+  int addBadModulesSet(const std::map<int, double>& moduleID2value,
+                      const double center,
+                      const double distance,
+                      std::unordered_set<int>& badModulesSet);
 
   // actions
   void beginLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) final;
@@ -175,6 +184,7 @@ DynamicVetoProducerEDp::DynamicVetoProducerEDp(const edm::ParameterSet& iConfig)
   fractionalResponse_value = pset.getParameter<std::vector<double> >("FractionalResponse_value");
   moduleListRing1_ = pset.getUntrackedParameter<std::vector<int> >("ModuleListRing1", {});
   lumisectionCountMin_ = pset.getUntrackedParameter<int>("MinimumLSCount", 10);
+  filledBunchThreshold_ = pset.getParameter<double>("FilledBunchThreshold");
   stdMultiplyer1_ = pset.getParameter<double>("StdMultiplyier1");
   stdMultiplyer2_ = pset.getParameter<double>("StdMultiplyier2");
   fractionThreshold2_ = pset.getParameter<double>("FractionThreshold2");
@@ -318,34 +328,18 @@ TrackerRegion DynamicVetoProducerEDp::getTrackerRegion2(unsigned int mId) {
   return static_cast<TrackerRegion>(region);
 }
 
-// TrackerRegion DynamicVetoProducerEDp::getTrackerRegion3(unsigned int mId){
-
-//   auto detId = DetId(mId);
-//   int subdetectorId = detId.subdetId();
-
-//   int region = 0;
-//   if ( subdetectorId == 1 ){
-//     region = PixelBarrelName(detId, trackerTopology, false).layerName();
-//   }
-//   else if ( subdetectorId == 2 ){
-//     auto tmp = PixelEndcapName(detId, trackerTopology, false);
-//     region = tmp.diskName() + 3*tmp.ringName() - 3;
-//                                // ring number , according to radius, 1-lower, 2- higher
-//   }
-//   return static_cast<TrackerRegion>(region);
-// }
-
 //--------------------------------------------------------------------------------------------------
-int DynamicVetoProducerEDp::addBadModules(const std::map<int, double>& moduleID2value,
-                                       const double center,
-                                       const double distance,
-                                       std::vector<int>& badModules) {
+
+int DynamicVetoProducerEDp::addBadModulesSet(const std::map<int, double>& moduleID2value,
+                                        const double center,
+                                        const double distance,
+                                        std::unordered_set<int>& badModulesSet) {
   int countBad = 0;
   double thr1 = (center - distance);
   double thr2 = (center + distance);
   for (const auto& [key, value] : moduleID2value) {
     if ((value < thr1) || (thr2 < value)) {
-      badModules.push_back(key);
+      badModulesSet.insert(key);
       countBad++;
     }
   }
@@ -388,10 +382,9 @@ void DynamicVetoProducerEDp::endLuminosityBlockProduce(edm::LuminosityBlock& lum
     }
   }
 
-  std::map<TrackerRegion, double> region2sumClusterCount;  // orbit integrated sum (over modules) cluster count in this LS
   for (size_t i = 0; i < modIDs.size(); i++) {
     if (fractionalResponseMap.find(modIDs.at(i)) == fractionalResponseMap.end()){
-      baseVetSet.insert(modIDs.at(i));
+      baseVetoSet.insert(modIDs.at(i));
       continue;
     }
     
@@ -402,24 +395,16 @@ void DynamicVetoProducerEDp::endLuminosityBlockProduce(edm::LuminosityBlock& lum
       for (size_t bx = 0; bx < size_t(LumiConstants::numBX); bx++)
         bxsum += clustersPerBXInput.at(i * LumiConstants::numBX + bx);
     else{
-      throw std::not_implemented("Thresholding for filled bunches not implemented yet in DynamicVetoProducerEDp.");
       for (size_t bx : filledBunches)
         bxsum += clustersPerBXInput.at( i * LumiConstants::numBX + bx);
     }
 
-    region2moduleID2LS2counts[region][modIDs.at(i)].push_back(bxsum);
-    region2sumClusterCount[region] += bxsum;
-  }
-
-  for (const auto& [region, meanClusterCount] : region2meanClusterCount){
-    meanClusterCount = region2sumClusterCount[region] / region2moduleID2LS2counts[region].size();
-    for (const auto& [modID, LS2counts] : region2moduleID2LS2counts[region]){
-      region2moduleID2countRatio[region][modID] += LS2counts.back() / meanClusterCount;
-    }
+    region2moduleID2LS2count[region][modIDs.at(i)].push_back(bxsum);
+    region2moduleID2sumCount[region][modIDs.at(i)] += bxsum;
   }
 
   if (coutOn_)
-    std::cout << "DynamicVetoProducerEDp::endLuminosityBlockProduce: modID.size(): "<<modID.size()<<" region2moduleID2countRatio.size(): "<<region2moduleID2countRatio.size()<<" region2moduleID2LS2counts.size(): "<<region2moduleID2LS2counts.size()<< std::endl;
+    std::cout << "DynamicVetoProducerEDp::endLuminosityBlockProduce: modIDs.size(): "<<modIDs.size()<<" region2moduleID2sumCount.size(): "<<region2moduleID2sumCount.size()<<" region2moduleID2LS2count.size(): "<<region2moduleID2LS2count.size()<< std::endl;
   
 }
 
@@ -444,33 +429,34 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
 
   // round1: remove outliers in terms of occupancy in a given layer/region
   if (filterLevel_ >= 1){
-    for (const auto& [region, moduleID2value] : region2moduleID2countRatio) {
-      
+    for (const auto& [region, moduleID2value] : region2moduleID2sumCount) {
+
       auto quantiles = getQuantile(moduleID2value, {0.16, 0.5, 0.84});
       double center = quantiles[1];
       double std = std::min(quantiles[2] - quantiles[1], quantiles[1] - quantiles[0]);
 
       double distance = std * stdMultiplyer1_;
-      int badModuleCount = addBadModules(moduleID2value, center, distance, dynamicVeto1_);
+      addBadModulesSet(moduleID2value, center, distance, dynamicVetoSet1);
 
       if (savePlots_) {
         std::string name = "Round1_REGION" + std::to_string(int(region)) + "_RUN" + std::to_string(runSeg.run());
-        makePlot(name, moduleID2value, center, std, distance, badModuleCount);
+        makePlot(name, moduleID2value, center, std, distance, dynamicVetoSet1.size());
       }
     }
-    // edm::LogInfo("INFO") << "DynamicVetoProducerEDp::endRun: Modules removed in round 1: " << dynamicVeto1_.size();
+
+    edm::LogInfo("INFO") << "DynamicVetoProducerEDp::endRun: Modules removed in round 1: " << dynamicVetoSet1.size();
     if (coutOn_)
-      std::cout << "DynamicVetoProducerEDp::endRun: region2moduleID2countRatio.size(): "<<region2moduleID2countRatio.size()<<" Modules removed in round 1: " << dynamicVeto1_.size() << std::endl;
+      std::cout << "DynamicVetoProducerEDp::endRun: Modules removed in round 1: " << dynamicVetoSet1.size() << std::endl;
   }
 
   // round2: filter based on the stability of the per-LS cluster count of the module over the run
   if (filterLevel_ >= 2){
-    for (const auto& [region, moduleID2LS2counts] : region2moduleID2LS2counts) {
+    for (const auto& [region, moduleID2LS2counts] : region2moduleID2LS2count) {
       // recomputed average (over modules) number of clusters over not excluded moules in layer
       std::vector<double> LS2meanCounts = std::vector<double>(lumisectionCount_, 0);
       unsigned int moduleCount = 0;
       for (const auto& [mId, LS2counts] : moduleID2LS2counts) {
-        if (std::find(dynamicVeto1_.begin(), dynamicVeto1_.end(), mId) != dynamicVeto1_.end())
+        if (dynamicVetoSet1.count(mId) == 0)
           continue;
         for (size_t i = 0; i < LS2counts.size(); i++)
           LS2meanCounts[i] += LS2counts[i];
@@ -481,7 +467,7 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
 
       // find if too many are outliers
       for (const auto& [mId, LS2counts] : moduleID2LS2counts) {
-        if (std::find(dynamicVeto1_.begin(), dynamicVeto1_.end(), mId) != dynamicVeto1_.end())
+        if (dynamicVetoSet1.count(mId) == 0)
           continue;
 
         // we must normalize to avoid spread due to burnoff during the run
@@ -507,12 +493,12 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
 
         double fractionBad = double(countBad) / LS2counts.size();
         if (fractionBad > fractionThreshold2_)
-          dynamicVeto2_.push_back(mId);  // should only be 0.2% for a gaussian distribution
+          dynamicVetoSet2.insert(mId);  // should only be 0.2% for a gaussian distribution
       }
     }
-    // edm::LogInfo("INFO") << "DynamicVetoProducerEDp::endRun: Modules removed in round 2: " << dynamicVeto2_.size();
+    // edm::LogInfo("INFO") << "DynamicVetoProducerEDp::endRun: Modules removed in round 2: " << dynamicVetoSet2.size();
     if (coutOn_)
-      std::cout << "DynamicVetoProducerEDp::endRun: region2moduleID2LS2counts.size(): "<<region2moduleID2LS2counts.size()<<" Modules removed in round 2: " << dynamicVeto2_.size() << std::endl;
+      std::cout << "DynamicVetoProducerEDp::endRun: region2moduleID2LS2count.size(): "<<region2moduleID2LS2count.size()<<" Modules removed in round 2: " << dynamicVetoSet2.size() << std::endl;
   }
 
   // round3: filter based on the fractional response of the module
@@ -520,11 +506,11 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
     double totalFraction = 0;
     double totalNumberOfClusters = 0;
     std::map<int, double> moduleID2totalNumberOfClusters;
-    for (const auto& [region, moduleID2LS2counts] : region2moduleID2LS2counts) {
+    for (const auto& [region, moduleID2LS2counts] : region2moduleID2LS2count) {
       for (const auto& [mId, LS2counts] : moduleID2LS2counts) {
-        if (std::find(dynamicVeto1_.begin(), dynamicVeto1_.end(), mId) != dynamicVeto1_.end())
+        if (dynamicVetoSet1.count(mId) == 0)
           continue;
-        if (std::find(dynamicVeto2_.begin(), dynamicVeto2_.end(), mId) != dynamicVeto2_.end())
+        if (dynamicVetoSet2.count(mId) == 0)
           continue;
 
         auto it = fractionalResponseMap.find(mId);
@@ -549,47 +535,64 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
     double std = std::min(quantiles[2] - quantiles[1], quantiles[1] - quantiles[0]);
 
     double distance = std * stdMultiplyer3_;
-    int badModuleCount = addBadModules(moduleID2doubleRatio, center, distance, dynamicVeto3_);
+    addBadModulesSet(moduleID2doubleRatio, center, distance, dynamicVetoSet3);
 
     // if (savePlots_) {
     //   std::string name = "Round3_RUN" + std::to_string(runSeg.run());
-    //   makePlot(name, moduleID2doubleRatio, center, std, distance, badModuleCount);
+    //   makePlot(name, moduleID2doubleRatio, center, std, distance, dynamicVetoSet3.size());
     // }
 
     if (coutOn_)
-      std::cout << "DynamicVetoProducerEDp::endRun: Modules removed in round 3: " << dynamicVeto3_.size()
+      std::cout << "DynamicVetoProducerEDp::endRun: Modules removed in round 3: " << dynamicVetoSet3.size()
                 << std::endl;
   }
-
-  // for a pretty output
-  std::sort(dynamicVeto1_.begin(), dynamicVeto1_.end());
-  std::sort(dynamicVeto2_.begin(), dynamicVeto2_.end());
-  std::sort(dynamicVeto3_.begin(), dynamicVeto3_.end());
 
   // outoputs
   if (saveCSVFile_) {
     std::lock_guard<std::mutex> lock(fileLock_);
     std::ofstream csfile(csvOutLabel_, std::ios_base::app);
 
-    csfile << std::to_string(runSeg.run()) << ",r1";
-    for (auto v : dynamicVeto1_)
-      csfile << "," << std::to_string(v);
-    csfile << std::endl;
+    if (true){
+      std::vector<int> dynamicVetoV( baseVetoSet.size()+dynamicVetoSet1.size()+dynamicVetoSet2.size()+dynamicVetoSet3.size() );
+      dynamicVetoV.insert(dynamicVetoV.end(), baseVetoSet.begin(), baseVetoSet.end());
+      dynamicVetoV.insert(dynamicVetoV.end(), dynamicVetoSet1.begin(), dynamicVetoSet1.end());
+      dynamicVetoV.insert(dynamicVetoV.end(), dynamicVetoSet2.begin(), dynamicVetoSet2.end());
+      dynamicVetoV.insert(dynamicVetoV.end(), dynamicVetoSet3.begin(), dynamicVetoSet3.end());
+      std::sort(dynamicVetoV.begin(), dynamicVetoV.end());
+      csfile << std::to_string(runSeg.run()) << ",";
+      for (auto v : dynamicVetoV)
+        csfile << "," << std::to_string(v);
+      csfile << std::endl;
+    }
+    else{
+      std::vector<int> baseVeto(baseVetoSet.begin(), baseVetoSet.end());
+      std::sort(baseVeto.begin(), baseVeto.end());
+      csfile << std::to_string(runSeg.run()) << ",0";
+      for (auto v : baseVeto)
+        csfile << "," << std::to_string(v);
+      csfile << std::endl;
 
-    csfile << std::to_string(runSeg.run()) << ",r2";
-    for (auto v : dynamicVeto2_)
-      csfile << "," << std::to_string(v);
-    csfile << std::endl;
+      std::vector<int> dynamicVeto1(dynamicVetoSet1.begin(), dynamicVetoSet1.end());
+      std::sort(dynamicVeto1.begin(), dynamicVeto1.end());
+      csfile << std::to_string(runSeg.run()) << ",1";
+      for (auto v : dynamicVeto1)
+        csfile << "," << std::to_string(v);
+      csfile << std::endl;
 
-    csfile << std::to_string(runSeg.run()) << ",r3";
-    for (auto v : dynamicVeto3_)
-      csfile << "," << std::to_string(v);
-    csfile << std::endl;
+      std::vector<int> dynamicVeto2(dynamicVetoSet2.begin(), dynamicVetoSet2.end());
+      std::sort(dynamicVeto2.begin(), dynamicVeto2.end());
+      csfile << std::to_string(runSeg.run()) << ",2";
+      for (auto v : dynamicVeto2)
+        csfile << "," << std::to_string(v);
+      csfile << std::endl;
 
-    // for (const auto& [region, badModuleCount] : region2badModuleCount) {
-    //   csfile << std::to_string(region) <<","<< std::to_string(badModuleCount) <<","<< std::to_string(region2center[region]) <<","<< std::to_string(region2std[region]) << std::endl;
-    // }
-
+      std::vector<int> dynamicVeto3(dynamicVetoSet3.begin(), dynamicVetoSet3.end());
+      std::sort(dynamicVeto3.begin(), dynamicVeto3.end());
+      csfile << std::to_string(runSeg.run()) << ",3";
+      for (auto v : dynamicVeto3)
+        csfile << "," << std::to_string(v);
+      csfile << std::endl;
+    }
     csfile.close();
     edm::LogInfo("INFO") << "DynamicVetoProducerEDp::endRun: CSV created: " << csvOutLabel_;
     if (coutOn_)
@@ -597,17 +600,12 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
   }
 
   PccVetoList pccVetoList;
-  if (saveBaseVeto_){
-    std::vector<int> baseVeto(baseVetoSet.begin(), baseVetoSet.end());
-    pccVetoList.addToVetoList(baseVeto);
-  }
-  pccVetoList.addToVetoList(dynamicVeto1_);
-  pccVetoList.addToVetoList(dynamicVeto2_);
-  pccVetoList.addToVetoList(dynamicVeto3_);
-  if (saveBaseVeto_)
-    pccVetoList.generateResponseFraction(fractionalResponseMap);
-  else
-    pccVetoList.generateResponseFraction(fractionalResponseMap, baseVeto_);
+  pccVetoList.addToVetoList(baseVetoSet);
+  pccVetoList.addToVetoList(dynamicVetoSet1);
+  pccVetoList.addToVetoList(dynamicVetoSet2);
+  pccVetoList.addToVetoList(dynamicVetoSet3);
+  pccVetoList.generateResponseFraction(fractionalResponseMap);
+
   runSeg.emplace(putToken_, std::move(static_cast<PccVetoListTransient>(pccVetoList)));
 
   if (poolDbService.isAvailable()) {
@@ -705,14 +703,14 @@ void DynamicVetoProducerEDp::resetContainers() {
   if (coutOn_)
     std::cout << "DynamicVetoProducerEDp::resetContainers: Executing." << std::endl;
 
-  dynamicVeto1_.clear();
-  region2moduleID2countRatio.clear();
+  dynamicVetoSet1.clear();
+  region2moduleID2sumCount.clear();
   lumisectionCount_ = 0;
 
-  dynamicVeto2_.clear();
-  region2moduleID2LS2counts.clear();
+  dynamicVetoSet2.clear();
+  region2moduleID2LS2count.clear();
 
-  dynamicVeto3_.clear();
+  dynamicVetoSet3.clear();
 }
 
 void DynamicVetoProducerEDp::endJob() {

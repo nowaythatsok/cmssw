@@ -132,9 +132,6 @@ void RawPCCProducerDynVeto::globalEndLuminosityBlockProduce(edm::LuminosityBlock
     for (unsigned int i = 0; i < modID.size(); i++) {
       if (dynamicVeto->isBad(modID.at(i)))
         continue;
-      if ((!dynamicVeto->getShouldApplyBaseVeto()) &&
-          (std::find(modVeto_.begin(), modVeto_.end(), modID.at(i)) == modVeto_.end()))
-        continue;
       goodMods.push_back(i);
       dynamicVetoScaleFactor = 1.0 / dynamicVeto->responseFraction;
     }

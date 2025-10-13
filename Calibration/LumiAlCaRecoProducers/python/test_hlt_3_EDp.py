@@ -14,7 +14,7 @@ process = cms.Process('PCC',Run3_2024)
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/e644fd22-7a9f-4e3e-8edc-626aabea358d.root'
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCZeroBias-PromptReco-v1/000/382/913/00000/edc8ddbc-de7e-4896-ad05-b63a1805d011.root'
 
-/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/
+# /eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/01e533af-8d30-445e-ae06-e6556de459d1.root'
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/70db01b0-c42e-45d0-a1bb-b28d4fa4458c.root'
 # 'file:/eos/cms/store/data/Run2024F/AlCaLumiPixelsCountsPrompt/ALCARECO/AlCaPCCRandom-PromptReco-v1/000/382/913/00000/1c99fe38-e3dd-4764-a104-d0d0a274c027.root'
@@ -99,6 +99,7 @@ process.dynamicVetoProd = cms.EDProducer("DynamicVetoProducerEDp",
         ModuleListRing1=cms.untracked.vint32(),
         # MinimumLSCount=cms.untracked.int32(200),
         MinimumLSCount=cms.untracked.int32(4),
+        FilledBunchThreshold=cms.double(0.1),
         StdMultiplyier1=cms.double(3.0),
         StdMultiplyier2=cms.double(3.0),
         FractionThreshold2=cms.double(0.02),
