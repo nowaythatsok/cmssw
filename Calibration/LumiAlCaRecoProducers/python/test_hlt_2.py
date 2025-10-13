@@ -153,20 +153,20 @@ process.dynamicVetoProd.DynamicVetoProducerParameters.ModuleListRing1.extend([
 #     )
 # )
 
-# process.load("CondCore.CondDB.CondDB_cfi")
-# process.CondDB.connect = "sqlite_file:PCC_Veto.db" # Output SQLite file
-# process.PoolDBOutputService = cms.Service(
-#     "PoolDBOutputService", process.CondDB,
-#     toPut = cms.VPSet(
-#         cms.PSet(
-#             record = cms.string('PccVetoListRcd'),
-#             tag = cms.string('TestVeto')
-#         )
-#     ),
-#     loadBlobStreamer = cms.untracked.bool(False),
-#     timetype   = cms.untracked.string('runnumber'),
-#     DBParameters=cms.PSet(messageLevel=cms.untracked.int32(0))
-# )
+process.load("CondCore.CondDB.CondDB_cfi")
+process.CondDB.connect = "sqlite_file:PCC_Veto.db" # Output SQLite file
+process.PoolDBOutputService = cms.Service(
+    "PoolDBOutputService", process.CondDB,
+    toPut = cms.VPSet(
+        cms.PSet(
+            record = cms.string('PccVetoListRcd'),
+            tag = cms.string('TestVeto')
+        )
+    ),
+    loadBlobStreamer = cms.untracked.bool(False),
+    timetype   = cms.untracked.string('runnumber'),
+    DBParameters=cms.PSet(messageLevel=cms.untracked.int32(0))
+)
 
 #################################
 # OutPath products
