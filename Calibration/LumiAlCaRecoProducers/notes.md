@@ -99,12 +99,16 @@ git cms-addpkg DataFormats/SiPixelDetId
 /eos/user/p/pmajor/pcc_dynamic_veto/CMSSW_14_2_2/src/
 or
 cd ../../..
+cd src
 cmsenv
 scram b -j16
 cd Calibration/LumiAlCaRecoProducers/python/
 rm -f *.root *.csv *.png 
 cmsRun test_hlt_2.py
 
+
+conddb --db sqlite:PCC_Veto.db list TestVeto
+conddb --db sqlite:PCC_Veto.db dump -h  
 
 
 

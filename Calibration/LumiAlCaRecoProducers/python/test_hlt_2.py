@@ -155,6 +155,13 @@ process.dynamicVetoProd.DynamicVetoProducerParameters.ModuleListRing1.extend([
 
 process.load("CondCore.CondDB.CondDB_cfi")
 process.CondDB.connect = "sqlite_file:PCC_Veto.db" # Output SQLite file
+# process.PoolDBOutputService = cms.Service("PoolDBOutputService", process.CondDB,
+#                                           toPut = cms.VPSet(cms.PSet(record = cms.string('LumiCorrectionsRcd'),
+#                                                                      tag = cms.string('TestCorrections'))),
+#                                           loadBlobStreamer = cms.untracked.bool(False),
+#                                           timetype   = cms.untracked.string('lumiid'))
+
+
 process.PoolDBOutputService = cms.Service(
     "PoolDBOutputService", process.CondDB,
     toPut = cms.VPSet(
@@ -165,7 +172,7 @@ process.PoolDBOutputService = cms.Service(
     ),
     loadBlobStreamer = cms.untracked.bool(False),
     timetype   = cms.untracked.string('runnumber'),
-    DBParameters=cms.PSet(messageLevel=cms.untracked.int32(0))
+    # DBParameters=cms.PSet(messageLevel=cms.untracked.int32(0))
 )
 
 #################################
