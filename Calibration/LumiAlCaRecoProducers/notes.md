@@ -102,11 +102,16 @@ cd ../../..
 cmsenv
 scram b -j16
 cd Calibration/LumiAlCaRecoProducers/python/
-rm -f *.root *.csv *.png 
-cmsRun test_hlt_2.py
+rm -f *.root *.csv *.png *.db
+cmsRun test_hlt_2_EDp.py
 
+cd ../../..; scram b -j16; cd Calibration/LumiAlCaRecoProducers/python/; rm -f *.root *.csv *.png *.db; cmsRun test_hlt_2_EDp.py
 
+root PCC_Run2test.root
+_file0->ls()
+((TTree*)_file0->Get("Runs"))->Print()
 
+_file0->Print()
 
 ###
 du -hs .[^.]*

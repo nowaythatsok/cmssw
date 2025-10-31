@@ -87,7 +87,6 @@ private:
   edm::EDPutTokenT<PccVetoListTransient> putToken_;
 
   std::unordered_set<int> baseVetoSet;
-  bool saveBaseVeto_;
   std::vector<int> moduleListRing1_;
   int lumisectionCountMin_;
   double filledBunchThreshold_;
@@ -177,9 +176,8 @@ DynamicVetoProducerEDp::DynamicVetoProducerEDp(const edm::ParameterSet& iConfig)
   auto pset = iConfig.getParameter<edm::ParameterSet>("DynamicVetoProducerEDpParameters");
 
   putToken_ = produces<PccVetoListTransient, edm::Transition::EndRun>(
-      pset.getUntrackedParameter<std::string>("outputProductName", "alcaPccVetoList"));
+      pset.getUntrackedParameter<std::string>("outputProductName"));
 
-  saveBaseVeto_ = pset.getParameter<bool>("SaveBaseVeto");
   fractionalResponse_modID = pset.getParameter<std::vector<int> >("FractionalResponse_modID");
   fractionalResponse_value = pset.getParameter<std::vector<double> >("FractionalResponse_value");
   moduleListRing1_ = pset.getUntrackedParameter<std::vector<int> >("ModuleListRing1", {});
@@ -403,8 +401,13 @@ void DynamicVetoProducerEDp::endLuminosityBlockProduce(edm::LuminosityBlock& lum
     region2moduleID2sumCount[region][modIDs.at(i)] += bxsum;
   }
 
-  if (coutOn_)
+  if (coutOn_){
     std::cout << "DynamicVetoProducerEDp::endLuminosityBlockProduce: modIDs.size(): "<<modIDs.size()<<" region2moduleID2sumCount.size(): "<<region2moduleID2sumCount.size()<<" region2moduleID2LS2count.size(): "<<region2moduleID2LS2count.size()<< std::endl;
+    for (const auto& [region, moduleID2LS2count] : region2moduleID2LS2count) {
+      std::cout << " region: "<<int(region)<<" moduleID2LS2count.size(): "<<moduleID2LS2count.size()<< std::endl;
+    }
+    std::cout << "DynamicVetoProducerEDp::endLuminosityBlockProduce: baseVetoSet.size(): "<<baseVetoSet.size()<< std::endl;
+  }
   
 }
 
@@ -432,15 +435,17 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
     for (const auto& [region, moduleID2value] : region2moduleID2sumCount) {
 
       auto quantiles = getQuantile(moduleID2value, {0.16, 0.5, 0.84});
+      if (quantiles.size() != 3)
+        throw std::runtime_error("Quantiles size not 3 in DynamicVetoProducerEDp::endRun. (1)");
       double center = quantiles[1];
       double std = std::min(quantiles[2] - quantiles[1], quantiles[1] - quantiles[0]);
 
       double distance = std * stdMultiplyer1_;
-      addBadModulesSet(moduleID2value, center, distance, dynamicVetoSet1);
+      int nBadModules = addBadModulesSet(moduleID2value, center, distance, dynamicVetoSet1);
 
       if (savePlots_) {
         std::string name = "Round1_REGION" + std::to_string(int(region)) + "_RUN" + std::to_string(runSeg.run());
-        makePlot(name, moduleID2value, center, std, distance, dynamicVetoSet1.size());
+        makePlot(name, moduleID2value, center, std, distance, nBadModules);
       }
     }
 
@@ -456,7 +461,7 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
       std::vector<double> LS2meanCounts = std::vector<double>(lumisectionCount_, 0);
       unsigned int moduleCount = 0;
       for (const auto& [mId, LS2counts] : moduleID2LS2counts) {
-        if (dynamicVetoSet1.count(mId) == 0)
+        if (dynamicVetoSet1.count(mId) != 0)
           continue;
         for (size_t i = 0; i < LS2counts.size(); i++)
           LS2meanCounts[i] += LS2counts[i];
@@ -467,7 +472,7 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
 
       // find if too many are outliers
       for (const auto& [mId, LS2counts] : moduleID2LS2counts) {
-        if (dynamicVetoSet1.count(mId) == 0)
+        if (dynamicVetoSet1.count(mId) != 0)
           continue;
 
         // we must normalize to avoid spread due to burnoff during the run
@@ -478,6 +483,8 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
         }
 
         auto quantiles = getQuantile(data, {0.16, 0.5, 0.84});
+        if (quantiles.size() != 3)
+          throw std::runtime_error("Quantiles size not 3 in DynamicVetoProducerEDp::endRun. (2)");
         double center = quantiles[1];
         double std = std::min(quantiles[2] - quantiles[1], quantiles[1] - quantiles[0]);
 
@@ -506,11 +513,12 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
     double totalFraction = 0;
     double totalNumberOfClusters = 0;
     std::map<int, double> moduleID2totalNumberOfClusters;
+
     for (const auto& [region, moduleID2LS2counts] : region2moduleID2LS2count) {
       for (const auto& [mId, LS2counts] : moduleID2LS2counts) {
-        if (dynamicVetoSet1.count(mId) == 0)
+        if (dynamicVetoSet1.count(mId) != 0)
           continue;
-        if (dynamicVetoSet2.count(mId) == 0)
+        if (dynamicVetoSet2.count(mId) != 0)
           continue;
 
         auto it = fractionalResponseMap.find(mId);
@@ -531,16 +539,19 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
     }
 
     auto quantiles = getQuantile(moduleID2doubleRatio, {0.16, 0.5, 0.84});
+    if (quantiles.size() != 3)
+      throw std::runtime_error("Quantiles size not 3 in DynamicVetoProducerEDp::endRun. (3)");
     double center = quantiles[1];
     double std = std::min(quantiles[2] - quantiles[1], quantiles[1] - quantiles[0]);
 
     double distance = std * stdMultiplyer3_;
     addBadModulesSet(moduleID2doubleRatio, center, distance, dynamicVetoSet3);
 
-    // if (savePlots_) {
-    //   std::string name = "Round3_RUN" + std::to_string(runSeg.run());
-    //   makePlot(name, moduleID2doubleRatio, center, std, distance, dynamicVetoSet3.size());
-    // }
+
+    if (savePlots_) {
+      std::string name = "Round3_RUN" + std::to_string(runSeg.run());
+      makePlot(name, moduleID2doubleRatio, center, std, distance, dynamicVetoSet3.size());
+    }
 
     if (coutOn_)
       std::cout << "DynamicVetoProducerEDp::endRun: Modules removed in round 3: " << dynamicVetoSet3.size()
@@ -553,13 +564,14 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
     std::ofstream csfile(csvOutLabel_, std::ios_base::app);
 
     if (true){
-      std::vector<int> dynamicVetoV( baseVetoSet.size()+dynamicVetoSet1.size()+dynamicVetoSet2.size()+dynamicVetoSet3.size() );
+      std::vector<int> dynamicVetoV;
+      dynamicVetoV.reserve( baseVetoSet.size() + dynamicVetoSet1.size() + dynamicVetoSet2.size() + dynamicVetoSet3.size());
       dynamicVetoV.insert(dynamicVetoV.end(), baseVetoSet.begin(), baseVetoSet.end());
       dynamicVetoV.insert(dynamicVetoV.end(), dynamicVetoSet1.begin(), dynamicVetoSet1.end());
       dynamicVetoV.insert(dynamicVetoV.end(), dynamicVetoSet2.begin(), dynamicVetoSet2.end());
       dynamicVetoV.insert(dynamicVetoV.end(), dynamicVetoSet3.begin(), dynamicVetoSet3.end());
       std::sort(dynamicVetoV.begin(), dynamicVetoV.end());
-      csfile << std::to_string(runSeg.run()) << ",";
+      csfile << std::to_string(runSeg.run()) << "," <<dynamicVetoV.size();
       for (auto v : dynamicVetoV)
         csfile << "," << std::to_string(v);
       csfile << std::endl;
@@ -599,20 +611,20 @@ void DynamicVetoProducerEDp::endRunProduce(edm::Run& runSeg, const edm::EventSet
       std::cout << "DynamicVetoProducerEDp::endRun: CSV created: " << csvOutLabel_ << std::endl;
   }
 
-  PccVetoList pccVetoList;
-  pccVetoList.addToVetoList(baseVetoSet);
-  pccVetoList.addToVetoList(dynamicVetoSet1);
-  pccVetoList.addToVetoList(dynamicVetoSet2);
-  pccVetoList.addToVetoList(dynamicVetoSet3);
-  pccVetoList.generateResponseFraction(fractionalResponseMap);
-
-  runSeg.emplace(putToken_, std::move(static_cast<PccVetoListTransient>(pccVetoList)));
+  PccVetoListTransient PccVetoListTransient;
+  PccVetoListTransient.addToVetoList(baseVetoSet);
+  PccVetoListTransient.addToVetoList(dynamicVetoSet1);
+  PccVetoListTransient.addToVetoList(dynamicVetoSet2);
+  PccVetoListTransient.addToVetoList(dynamicVetoSet3);
+  PccVetoListTransient.generateResponseFraction(fractionalResponseMap);
+  runSeg.emplace(putToken_, std::move(PccVetoListTransient));
 
   if (poolDbService.isAvailable()) {
     // timetype=cms.untracked.string("runnumber"),  should be set up in the config
     cond::Time_t iovStart = (cond::Time_t)(runSeg.run());
 
     // Hash writeOneIOV(const T& payload, Time_t time, const std::string& recordName)
+    PccVetoList pccVetoList(PccVetoListTransient.getBadModules(), PccVetoListTransient.getResponseFraction());
     poolDbService->writeOneIOV(pccVetoList, iovStart, "PccVetoListRcd");
     if (coutOn_)
       std::cout << "DynamicVetoProducerEDp::endRun: written to DB " << std::endl;
@@ -666,11 +678,11 @@ void DynamicVetoProducerEDp::makePlot(std::string name,
   TH1D* h = new TH1D(name.c_str(), name.c_str(), 60, min, max);
   for (const auto& [key, value] : moduleID2value)
     h->Fill(value);
-  if (coutOn_) {
-    for (const auto& [key, value] : moduleID2value)
-      std::cout << value << ", ";
-    std::cout << std::endl;
-  }
+  // if (coutOn_) {
+  //   for (const auto& [key, value] : moduleID2value)
+  //     std::cout << value << ", ";
+  //   std::cout << std::endl;
+  // }
 
   h->Draw();
   double maxVal = h->GetMaximum();

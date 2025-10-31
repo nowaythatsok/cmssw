@@ -19,9 +19,9 @@ fileNames = cms.untracked.vstring('file:/eos/home-a/alshevel/CMSSW_14_0_9_patch1
 #fileNames = cms.untracked.vstring('file:/afs/cern.ch/user/b/benitezj/public/BRIL/PCC/Run3Dev/Run2018D-AlCaLumiPixels-RAW-323702-D3FCD0FC-6328-B24E-AD3D-C22C55B968DD.root')
 )
 
-# process.maxEvents = cms.untracked.PSet(
-#     input = cms.untracked.int32(1000) 
-# )
+process.maxEvents = cms.untracked.PSet(
+    input = cms.untracked.int32(1000) 
+)
 
 # import of standard configurations
 process.load('Configuration.StandardSequences.Services_cff')
@@ -68,27 +68,12 @@ process.alcaPCCIntegrator = cms.EDProducer("AlcaPCCIntegrator",
 
 ################################
 ##ALCARECO->csv
-process.rawPCCProd = cms.EDProducer("RawPCCProducer",
-    RawPCCProducerParameters = cms.PSet(
-        inputPccLabel = cms.string("alcaPCCIntegrator"),
-        ProdInst = cms.string(""),
-        outputProductName = cms.untracked.string("lumiInfo"),
-        ApplyCorrections=cms.untracked.bool(False),
-        saveCSVFile=cms.untracked.bool(True),
-        modVeto=cms.vint32(),
-        OutputValue = cms.untracked.string("Average"),
-    )
-)
-
-################################
-##ALCARECO->csv
-process.dynamicVetoProd = cms.EDProducer("DynamicVetoProducerEDp",
+process.dynamicVetoProducer = cms.EDProducer("DynamicVetoProducerEDp",
     DynamicVetoProducerEDpParameters = cms.PSet(
         inputPccLabel = cms.string("alcaPCCIntegrator"),
         prodInst = cms.string(""),
-        outputProductName = cms.untracked.string("alcaPccVetoList"),
+        outputProductName = cms.untracked.string(""),
         BaseVeto=cms.vint32(),
-        SaveBaseVeto=cms.bool(False),
         FractionalResponse_modID=cms.vint32(),
         FractionalResponse_value=cms.vdouble(),
         ModuleListRing1=cms.untracked.vint32(),
@@ -111,12 +96,12 @@ with open("minimal_veto_frac_response-2024.txt") as f:
     tmp = [ v.split(",") for v in f.readlines()]
     moduleID          = [ int(l[0]) for l in tmp[1:]]
     ractionalResponse = [ float(l[1]) for l in tmp[1:]]
-    process.dynamicVetoProd.DynamicVetoProducerEDpParameters.FractionalResponse_modID.extend(moduleID)
-    process.dynamicVetoProd.DynamicVetoProducerEDpParameters.FractionalResponse_value.extend(ractionalResponse)
+    process.dynamicVetoProducer.DynamicVetoProducerEDpParameters.FractionalResponse_modID.extend(moduleID)
+    process.dynamicVetoProducer.DynamicVetoProducerEDpParameters.FractionalResponse_value.extend(ractionalResponse)
 
 
 
-process.dynamicVetoProd.DynamicVetoProducerEDpParameters.ModuleListRing1.extend([
+process.dynamicVetoProducer.DynamicVetoProducerEDpParameters.ModuleListRing1.extend([
   344282116, 344283140, 344286212, 344941572, 352588804, 352589828, 352592900, 353215492, 344724484, 344725508, 344728580, 344729604, 344732676, 344733700, 344736772, 344737796, 
   352596996, 352598020, 352601092, 353227780, 352605188, 353235972, 352609284, 352610308, 344740868, 344741892, 344744964, 344745988, 344749060, 344750084, 344753156, 344754180, 
   352613380, 353244164, 352617476, 352618500, 352621572, 353256452, 352625668, 353268740, 344757252, 344758276, 344761348, 344762372, 344765444, 344766468, 344769540, 344770564, 
@@ -136,6 +121,25 @@ process.dynamicVetoProd.DynamicVetoProducerEDpParameters.ModuleListRing1.extend(
   353186820, 353187844, 353190916, 353191940, 353195012, 353196036, 353199108, 353200132 
 ])
 
+################################
+##ALCARECO->csv
+process.rawPCCProd = cms.EDProducer("RawPCCProducerDynVeto",
+    RawPCCProducerDynVetoParameters = cms.PSet(
+        inputPccLabel = cms.string("alcaPCCIntegrator"),
+        ProdInstPCCI = cms.string(""),
+        inputDynamicVetoLabel = cms.string("dynamicVetoProducer"),
+        ProdInstDynamicVeto = cms.string(""),
+        staticModuleVetoList = cms.vint32(),
+        useDynamicModVetoDB = cms.bool(False),
+        useDynamicModVetoTransient = cms.bool(True),
+        ApplyCorrections=cms.untracked.bool(False),
+        saveCSVFile=cms.untracked.bool(True),
+        OutputValue = cms.untracked.string("Average"),
+        outputProductName = cms.untracked.string("lumiInfo"),
+        CsvFileName=cms.untracked.string("rawPCCProducerDynVeto_Run2test.csv"),
+    )
+)
+
 #####################################
 
 # process.dynamicVetoProd_old = cms.EDProducer("DynamicVetoProducerEDp_old",
@@ -150,20 +154,20 @@ process.dynamicVetoProd.DynamicVetoProducerEDpParameters.ModuleListRing1.extend(
 #     )
 # )
 
-# process.load("CondCore.CondDB.CondDB_cfi")
-# process.CondDB.connect = "sqlite_file:PCC_Veto.db" # Output SQLite file
-# process.PoolDBOutputService = cms.Service(
-#     "PoolDBOutputService", process.CondDB,
-#     toPut = cms.VPSet(
-#         cms.PSet(
-#             record = cms.string('PccVetoListRcd'),
-#             tag = cms.string('TestVeto')
-#         )
-#     ),
-#     loadBlobStreamer = cms.untracked.bool(False),
-#     timetype   = cms.untracked.string('runnumber'),
-#     DBParameters=cms.PSet(messageLevel=cms.untracked.int32(0))
-# )
+process.load("CondCore.CondDB.CondDB_cfi")
+process.CondDB.connect = "sqlite_file:PCC_Veto.db" # Output SQLite file
+process.PoolDBOutputService = cms.Service(
+    "PoolDBOutputService", process.CondDB,
+    toPut = cms.VPSet(
+        cms.PSet(
+            record = cms.string('PccVetoListRcd'),
+            tag = cms.string('TestVeto')
+        )
+    ),
+    loadBlobStreamer = cms.untracked.bool(False),
+    timetype   = cms.untracked.string('runnumber'),
+    # DBParameters=cms.PSet(messageLevel=cms.untracked.int32(0))
+)
 
 #################################
 # OutPath products
@@ -183,9 +187,8 @@ process.ALCARECOStreamPromptCalibProdPCC = cms.OutputModule("PoolOutputModule",
                                            #'keep *_siPixelClustersForLumi_*_*',
                                            'keep *_alcaPCCEventProducer_*_*',
                                            'keep *_alcaPCCIntegrator_*_*',
+                                           'keep *_dynamicVetoProducer_*_*',
                                            'keep *_rawPCCProd_*_*',
-                                        #    'keep *_dynamicVetoProd_*_*',
-                                        #    'keep *_dynamicVetoProd_old_*_*',
                                        )
 )
 
@@ -196,12 +199,9 @@ process.seqALCARECOPromptCalibProdPCC = cms.Sequence(
     +process.siPixelClustersForLumi
     +process.alcaPCCEventProducer
     +process.alcaPCCIntegrator
+    +process.dynamicVetoProducer
     +process.rawPCCProd
-    +process.dynamicVetoProd
-    # +process.dynamicVetoProd_old
     )
-#process.seqALCARECOPromptCalibProdPCC = cms.Sequence(process.siPixelDigisForLumi+process.siPixelClustersForLumi+process.alcaPCCEventProducer+process.alcaPCCIntegrator)
-#process.seqALCARECOPromptCalibProdPCC = cms.Sequence(process.siPixelDigisForLumi+process.siPixelClustersForLumi+process.alcaPCCEventProducer)
 
 process.pathALCARECOPromptCalibProdPCC = cms.Path(process.seqALCARECOPromptCalibProdPCC)
 process.ALCARECOStreamPromptCalibProdOutPath = cms.EndPath(process.ALCARECOStreamPromptCalibProdPCC)

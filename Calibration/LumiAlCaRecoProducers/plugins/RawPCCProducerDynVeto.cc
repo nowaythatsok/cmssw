@@ -13,19 +13,24 @@ ________________________________________________________________**/
 #include <mutex>
 #include <string>
 #include <vector>
+#include <unordered_set>
+
 #include "CondFormats/DataRecord/interface/LumiCorrectionsRcd.h"
 #include "CondFormats/DataRecord/interface/PccVetoListRcd.h"
 #include "CondFormats/Luminosity/interface/LumiCorrections.h"
 #include "CondFormats/Luminosity/interface/PccVetoList.h"
 #include "DataFormats/Luminosity/interface/LumiConstants.h"
 #include "DataFormats/Luminosity/interface/LumiInfo.h"
+#include "DataFormats/Luminosity/interface/PccVetoListTransient.h"
 #include "DataFormats/Luminosity/interface/PixelClusterCounts.h"
 #include "FWCore/Framework/interface/ConsumesCollector.h"
 #include "FWCore/Framework/interface/ESHandle.h"
 #include "FWCore/Framework/interface/Event.h"
 #include "FWCore/Framework/interface/EventSetup.h"
 #include "FWCore/Framework/interface/Frameworkfwd.h"
-#include "FWCore/Framework/interface/global/EDProducer.h"
+// #include "FWCore/Framework/interface/global/EDProducer.h"
+#include "FWCore/Framework/interface/one/EDProducer.h"
+// #include "FWCore/Framework/interface/stream/EDProducer.h"
 #include "FWCore/Framework/interface/LuminosityBlock.h"
 #include "FWCore/Framework/interface/MakerMacros.h"
 #include "FWCore/MessageLogger/interface/MessageLogger.h"
@@ -33,24 +38,39 @@ ________________________________________________________________**/
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "FWCore/Utilities/interface/EDGetToken.h"
 
-class RawPCCProducerDynVeto : public edm::global::EDProducer<edm::EndLuminosityBlockProducer> {
+// class RawPCCProducerDynVeto : public edm::global::EDProducer<edm::EndLuminosityBlockProducer, edm::BeginRunProducer> {
+class RawPCCProducerDynVeto : public edm::one::EDProducer<edm::BeginRunProducer, edm::EndLuminosityBlockProducer> {
+  // class RawPCCProducerDynVeto : public edm::stream::EDProducer<edm::BeginRunProducer, edm::EndLuminosityBlockProducer> {
 public:
   explicit RawPCCProducerDynVeto(const edm::ParameterSet&);
   ~RawPCCProducerDynVeto() override;
 
 private:
-  void globalEndLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) const final;
-  void produce(edm::StreamID, edm::Event& iEvent, const edm::EventSetup& iSetup) const final;
+  // void globalEndLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) const final;
+  void endLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) override;
+  // void endLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) override;
+  // void produce(edm::StreamID, edm::Event& iEvent, const edm::EventSetup& iSetup) const final;
+  void produce(edm::Event&, edm::EventSetup const&) override {}
+
+  // void globalBeginRunProduce(edm::Run & runSeg, const edm::EventSetup& iSetup) const final;
+  void beginRunProduce(edm::Run & runSeg, const edm::EventSetup& iSetup) override;
+  // void beginRun(edm::Run & runSeg, const edm::EventSetup& iSetup) override;
 
   //input object labels
   edm::EDGetTokenT<reco::PixelClusterCounts> pccToken_;
+  edm::EDGetTokenT<PccVetoListTransient> dinamicVetoTransientToken_;
+
   //background corrections from DB
   const edm::ESGetToken<LumiCorrections, LumiCorrectionsRcd> lumiCorrectionsToken_;
 
   //The list of modules to skip in the lumi calc.
-  const edm::ESGetToken<PccVetoList, PccVetoListRcd> dinamicVetoToken_;
-  const std::vector<int> modVeto_;
-  const bool useDynamicModVeto_;
+  const std::vector<int> staticModuleVetoList_;
+  const edm::ESGetToken<PccVetoList, PccVetoListRcd> dinamicVetoDBToken_;
+  
+  const bool useDynamicModVetoDB_;
+  const bool useDynamicModVetoTransient_;
+  PccVetoListTransient vetoObject_;
+
 
   //background corrections
   const bool applyCorr_;
@@ -62,7 +82,7 @@ private:
 
   //produce csv lumi file
   const bool saveCSVFile_;
-  const std::string csvOutLabel_;
+  const std::string csvFileName_;
   mutable std::mutex fileLock_;
 };
 
@@ -72,13 +92,20 @@ RawPCCProducerDynVeto::RawPCCProducerDynVeto(const edm::ParameterSet& iConfig)
           edm::InputTag(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
                             .getParameter<std::string>("inputPccLabel"),
                         iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
-                            .getParameter<std::string>("ProdInst")))),
+                            .getParameter<std::string>("ProdInstPCCI")))),
+      dinamicVetoTransientToken_(consumes<PccVetoListTransient, edm::InRun>(
+          edm::InputTag(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
+                            .getParameter<std::string>("inputDynamicVetoLabel"),
+                        iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
+                            .getParameter<std::string>("ProdInstDynamicVeto")))),
       lumiCorrectionsToken_(esConsumes<edm::Transition::EndLuminosityBlock>()),
-      dinamicVetoToken_(esConsumes<edm::Transition::EndLuminosityBlock>()),
-      modVeto_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
-                   .getParameter<std::vector<int>>("modVeto")),
-      useDynamicModVeto_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
-                             .getParameter<bool>("useDynamicModVeto")),
+      staticModuleVetoList_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
+                   .getParameter<std::vector<int>>("staticModuleVetoList")),
+      dinamicVetoDBToken_(esConsumes<edm::Transition::EndLuminosityBlock>()),
+      useDynamicModVetoDB_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
+                             .getParameter<bool>("useDynamicModVetoDB")),
+      useDynamicModVetoTransient_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
+                             .getParameter<bool>("useDynamicModVetoTransient")),
       applyCorr_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
                      .getUntrackedParameter<bool>("ApplyCorrections", false)),
       takeAverageValue_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
@@ -88,18 +115,45 @@ RawPCCProducerDynVeto::RawPCCProducerDynVeto(const edm::ParameterSet& iConfig)
               .getUntrackedParameter<std::string>("outputProductName", "alcaLumi"))),
       saveCSVFile_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
                        .getUntrackedParameter<bool>("saveCSVFile", false)),
-      csvOutLabel_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
-                       .getUntrackedParameter<std::string>("label", std::string("rawPCC.csv"))) {}
+      csvFileName_(iConfig.getParameter<edm::ParameterSet>("RawPCCProducerDynVetoParameters")
+                       .getUntrackedParameter<std::string>("CsvFileName", std::string("rawPCC.csv"))) {}
 
 //--------------------------------------------------------------------------------------------------
 RawPCCProducerDynVeto::~RawPCCProducerDynVeto() {}
 
-//--------------------------------------------------------------------------------------------------
-void RawPCCProducerDynVeto::produce(edm::StreamID, edm::Event& iEvent, const edm::EventSetup& iSetup) const {}
+// void RawPCCProducerDynVeto::globalBeginRunProduce(edm::Run & runSeg, const edm::EventSetup& iSetup) {
+void RawPCCProducerDynVeto::beginRunProduce(edm::Run & runSeg, const edm::EventSetup& iSetup) {
+// void RawPCCProducerDynVeto::beginRun(edm::Run & runSeg, const edm::EventSetup& iSetup) {
+
+  if (useDynamicModVetoDB_) {
+    if (useDynamicModVetoTransient_) 
+      throw std::runtime_error("Cannot use both dynamic veto from DB and Transient");
+
+    const PccVetoList dynamicVeto = iSetup.getData(dinamicVetoDBToken_);
+    vetoObject_.setBadModules(dynamicVeto.getBadModules());
+    vetoObject_.setResponseFraction(dynamicVeto.getResponseFraction());
+  } else if (useDynamicModVetoTransient_){
+    if (useDynamicModVetoDB_) 
+      throw std::runtime_error("Cannot use both dynamic veto from DB and Transient");
+
+    const edm::Handle<PccVetoListTransient> pccVetoListTransientHandle = runSeg.getHandle(dinamicVetoTransientToken_);
+    const PccVetoListTransient& dynamicVetoTransient = *(pccVetoListTransientHandle.product());
+    vetoObject_.setBadModules(dynamicVetoTransient.getBadModules());
+    vetoObject_.setResponseFraction(dynamicVetoTransient.getResponseFraction());
+  }
+  else {
+    if (vetoObject_.getBadModules().size() == 0){
+      vetoObject_.setBadModules(staticModuleVetoList_);
+      vetoObject_.setResponseFraction(1.0);
+    }
+  }
+
+}
 
 //--------------------------------------------------------------------------------------------------
-void RawPCCProducerDynVeto::globalEndLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg,
-                                                            const edm::EventSetup& iSetup) const {
+// void RawPCCProducerDynVeto::globalEndLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) const {
+void RawPCCProducerDynVeto::endLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) {
+// void RawPCCProducerDynVeto::endLuminosityBlockProduce(edm::LuminosityBlock& lumiSeg, const edm::EventSetup& iSetup) {
   //The total raw luminosity from the pixel clusters - not scaled
   float totalLumi = 0.0;
   //the statistical error on the lumi - large num ie sqrt(N)
@@ -125,27 +179,11 @@ void RawPCCProducerDynVeto::globalEndLuminosityBlockProduce(edm::LuminosityBlock
   ////////////////////////////
   ///Apply the module veto
   ///////////////////////////
-  std::vector<int> goodMods;
-  double dynamicVetoScaleFactor = 1.0;
-  if (useDynamicModVeto_) {
-    const auto dynamicVeto = &iSetup.getData(dinamicVetoToken_);
-    for (unsigned int i = 0; i < modID.size(); i++) {
-      if (dynamicVeto->isBad(modID.at(i)))
-        continue;
-      goodMods.push_back(i);
-      dynamicVetoScaleFactor = 1.0 / dynamicVeto->responseFraction;
-    }
-  } else {
-    for (unsigned int i = 0; i < modID.size(); i++) {
-      if (std::find(modVeto_.begin(), modVeto_.end(), modID.at(i)) == modVeto_.end()) {
-        goodMods.push_back(i);
-      }
-    }
-  }
-
   for (int bx = 0; bx < int(LumiConstants::numBX); bx++) {
-    for (unsigned int i = 0; i < goodMods.size(); i++) {
-      clustersPerBXOutput.at(bx) += clustersPerBXInput.at(goodMods.at(i) * int(LumiConstants::numBX) + bx);
+    for (unsigned int i = 0; i < modID.size(); i++){
+      if (vetoObject_.isBad(modID.at(i)))
+        continue;
+      clustersPerBXOutput.at(bx) += clustersPerBXInput.at( modID.at(i) * int(LumiConstants::numBX) + bx);
     }
   }
 
@@ -162,7 +200,7 @@ void RawPCCProducerDynVeto::globalEndLuminosityBlockProduce(edm::LuminosityBlock
 
   for (unsigned int i = 0; i < clustersPerBXOutput.size(); i++) {
     if (events.at(i) != 0) {
-      corrClustersPerBXOutput[i] = clustersPerBXOutput[i] * correctionScaleFactors[i] * dynamicVetoScaleFactor;
+      corrClustersPerBXOutput[i] = clustersPerBXOutput[i] * correctionScaleFactors[i] * vetoObject_.getScaleFactor();
     } else {
       corrClustersPerBXOutput[i] = 0.0;
     }
@@ -203,7 +241,7 @@ void RawPCCProducerDynVeto::globalEndLuminosityBlockProduce(edm::LuminosityBlock
   //Lumi saved in the csv file
   if (saveCSVFile_) {
     std::lock_guard<std::mutex> lock(fileLock_);
-    std::ofstream csfile(csvOutLabel_, std::ios_base::app);
+    std::ofstream csfile(csvFileName_, std::ios_base::app);
     csfile << std::to_string(lumiSeg.run()) << ",";
     csfile << std::to_string(lumiSeg.luminosityBlock()) << ",";
     csfile << std::to_string(totalLumi);
